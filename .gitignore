@@ -1,5 +1,8 @@
+# Temporary files
 tmp/
-*.zip
+situations/*/train/
+situations/*/test/
+situations/*/*.zip
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

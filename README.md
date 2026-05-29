@@ -20,8 +20,9 @@
 
 ## TODO
 
-- bolji graf
-- popraviti reward
-- riješiti učitavanje ruta
-- izvrtiti više situacija
-- isprobati više algoritama i usporediti
+- [] ~~bolji graf~~
+- [x] popraviti reward
+- [x] riješiti učitavanje ruta
+- [] usporedba s fiksnim rasporedom
+- [] izvrtiti više situacija
+- [] isprobati više algoritama i usporediti

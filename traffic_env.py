@@ -1,24 +1,25 @@
-import os
-
 import gymnasium as gym
 from sumolib import checkBinary
 import traci
 import traci.exceptions
 import numpy as np
-import subprocess
+import os
 
 YELLOW_TIME = 3.0
+MIN_GREEN_TIME = 10.0
 
 class TrafficEnv(gym.Env):
-    def __init__(self, show_gui=False, situation_name="", num_steps=1000, green_phase_indexes = []):
+    def __init__(self, situation_name="", num_steps=1000, green_phase_indexes=[], test_index=-1, show_gui=False):
         # spremanje parametara
         self.num_steps = num_steps
         self.situation_name = situation_name
         self.sumoBinary = checkBinary('sumo-gui' if show_gui else 'sumo')
         self.green_phase_indexes = green_phase_indexes
+        self.test_index = test_index
 
         # inicijalizacija
         self._next_phase = green_phase_indexes[0]
+        self.train_num = len(os.listdir(f"situations/{self.situation_name}/train"))
 
         # inicijalizira action space i observation space
         self.action_space = gym.spaces.Discrete(len(green_phase_indexes))
@@ -41,49 +42,66 @@ class TrafficEnv(gym.Env):
             waiting_time += traci.lane.getWaitingTime(lane)
             halting_num += traci.lane.getLastStepHaltingNumber(lane)
         
-        reward = -waiting_time-halting_num
+        # pohrani metriku
+        self.total_waiting += waiting_time
+        self.total_halting += halting_num
+        
+        reward = - waiting_time/1000.0 - (halting_num ** 2/100.0)
         return reward
     
     def reset(self, *, seed = None, options = None):
-        file_path = f"situations/{self.situation_name}/{self.situation_name}"
-        if traci.isLoaded():
-            traci.load(["-n", file_path + ".net.xml", "-r", file_path + ".rou.xml"])
+        file_path = f"situations/{self.situation_name}/{self.situation_name}" # putanja za net datoteku
+        # putanja za route datoteku
+        if self.test_index==-1:
+            rand = np.random.randint(0, self.train_num)
+            route_file = f"situations/{self.situation_name}/train/route{rand:03}"
         else:
-            result = subprocess.run([
-                "python", f"{os.environ['SUMO_HOME']}/tools/randomTrips.py",
-                "-n", file_path + ".net.xml",
-                "-o", file_path + ".rou.xml",
-                "--random",
-                "--period", "1.5",
-                "--end", str(self.num_steps),
-                "--validate"
-            ], capture_output=True)
-            traci.start([self.sumoBinary, "-n", file_path + ".net.xml", "-r", file_path + ".rou.xml", "--start"])
+            route_file = f"situations/{self.situation_name}/test/route{self.test_index:03}"
+        
+        # ucitavanje simulacije
+        if traci.isLoaded():
+            traci.load(["-n", file_path + ".net.xml", "-r", route_file + ".rou.xml"])
+        else:
+            traci.start([self.sumoBinary, "-n", file_path + ".net.xml", "-r", route_file + ".rou.xml"])
 
+        # inicijalizacija
+        self.total_waiting = 0
+        self.total_halting = 0
         self._steps_passed = 0
         self.controlled_lanes = sorted(set(traci.trafficlight.getControlledLanes("I0")))
         observation = self._get_observation()
-        return observation, {}
+        info = {
+            "total_waiting": self.total_waiting,
+            "total_halting": self.total_halting
+        }
+        return observation, info
     
     def step(self, action):
+        # izracunaj sljedeci korak
         curr_phase = traci.trafficlight.getPhase("I0")
+        passed_time = traci.trafficlight.getSpentDuration("I0")
         if curr_phase in self.green_phase_indexes:
-            if self.green_phase_indexes[action]!=curr_phase:
+            if self.green_phase_indexes[action]!=curr_phase and passed_time>=MIN_GREEN_TIME:
                 traci.trafficlight.setPhase("I0", traci.trafficlight.getPhase("I0") + 1)
                 self._next_phase = self.green_phase_indexes[action]
         else:
-            if traci.trafficlight.getSpentDuration("I0") >= YELLOW_TIME:
+            if passed_time >= YELLOW_TIME:
                 traci.trafficlight.setPhase("I0", self._next_phase)
 
+        # izvedi korak u simulaciji
         traci.simulationStep()
         self._steps_passed+=1
 
+        # izracun povratnih vrijednosti
         observation = self._get_observation()
         reward = self._get_reward()
         sim_finished = traci.simulation.getMinExpectedNumber() <= 0
         terminated = self._steps_passed >= self.num_steps or sim_finished
-        # terminated = traci.simulation.getMinExpectedNumber() <= 0
-        return observation, reward, terminated, False, {}
+        info = {
+            "total_waiting": self.total_waiting,
+            "total_halting": self.total_halting
+        }
+        return observation, reward, terminated, False, info
     
     def close(self):
         # zavrsava simulaciju
