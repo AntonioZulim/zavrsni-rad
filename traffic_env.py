@@ -42,12 +42,8 @@ class TrafficEnv(gym.Env):
             waiting_time += traci.lane.getWaitingTime(lane)
             halting_num += traci.lane.getLastStepHaltingNumber(lane)
         
-        # pohrani metriku
-        self.total_waiting += waiting_time
-        self.total_halting += halting_num
-        
         reward = - waiting_time/1000.0 - (halting_num ** 2/100.0)
-        return reward
+        return reward, waiting_time, halting_num
     
     def reset(self, *, seed = None, options = None):
         file_path = f"situations/{self.situation_name}/{self.situation_name}" # putanja za net datoteku
@@ -65,16 +61,10 @@ class TrafficEnv(gym.Env):
             traci.start([self.sumoBinary, "-n", file_path + ".net.xml", "-r", route_file + ".rou.xml"])
 
         # inicijalizacija
-        self.total_waiting = 0
-        self.total_halting = 0
         self._steps_passed = 0
         self.controlled_lanes = sorted(set(traci.trafficlight.getControlledLanes("I0")))
         observation = self._get_observation()
-        info = {
-            "total_waiting": self.total_waiting,
-            "total_halting": self.total_halting
-        }
-        return observation, info
+        return observation, {}
     
     def step(self, action):
         # izracunaj sljedeci korak
@@ -94,12 +84,13 @@ class TrafficEnv(gym.Env):
 
         # izracun povratnih vrijednosti
         observation = self._get_observation()
-        reward = self._get_reward()
+        reward, waiting_time, halting_num = self._get_reward()
         sim_finished = traci.simulation.getMinExpectedNumber() <= 0
         terminated = self._steps_passed >= self.num_steps or sim_finished
         info = {
-            "total_waiting": self.total_waiting,
-            "total_halting": self.total_halting
+            "waiting_time": waiting_time,
+            "halting_num": halting_num,
+            "reward": reward
         }
         return observation, reward, terminated, False, info
     
