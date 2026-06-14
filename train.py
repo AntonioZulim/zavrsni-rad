@@ -23,4 +23,4 @@ model.save("situations/intersection01/intersection01")
 env.close()
 
 plot_results([log_dir], TOTAL_TIMESTEPS, results_plotter.X_TIMESTEPS, "PPO")
-plt.show()
+plt.savefig("./graphs/train_rewards.png", format="png")

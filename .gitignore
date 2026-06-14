@@ -1,5 +1,6 @@
 # Temporary files
 tmp/
+graphs/
 situations/*/train/
 situations/*/test/
 situations/*/*.zip

@@ -9,13 +9,14 @@ YELLOW_TIME = 3.0
 MIN_GREEN_TIME = 10.0
 
 class TrafficEnv(gym.Env):
-    def __init__(self, situation_name="", num_steps=1000, green_phase_indexes=[], test_index=-1, show_gui=False):
+    def __init__(self, situation_name="", num_steps=1000, green_phase_indexes=[], test_index=-1, dist=0, show_gui=False):
         # spremanje parametara
         self.num_steps = num_steps
         self.situation_name = situation_name
         self.sumoBinary = checkBinary('sumo-gui' if show_gui else 'sumo')
         self.green_phase_indexes = green_phase_indexes
         self.test_index = test_index
+        self.dist = dist
 
         # inicijalizacija
         self._next_phase = green_phase_indexes[0]
@@ -52,7 +53,7 @@ class TrafficEnv(gym.Env):
             rand = np.random.randint(0, self.train_num)
             route_file = f"situations/{self.situation_name}/train/route{rand:03}"
         else:
-            route_file = f"situations/{self.situation_name}/test/route{self.test_index:03}"
+            route_file = f"situations/{self.situation_name}/test/dist{self.dist:02}/route{self.test_index:03}"
         
         # ucitavanje simulacije
         if traci.isLoaded():
